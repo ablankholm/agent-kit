@@ -115,7 +115,7 @@ Run this loop for every iteration. Follow `references/comparison.md` for the mec
    - Check the slop list and score against the rubric (`references/arbitration.md`). Score before re-reading each thesis.
    - If Haft is in use, run `h-compare` under parity for a Pareto view.
    - Resolve disagreements between seats with the precedence order and name the rule that decided each one.
-4. **Board.** Run `python3 <skill-dir>/scripts/build_board.py <ws>/log.json` (add `--inline` for a single shareable file). It shows the variant grid, the score table, the champion lineage, an A/B overlay across any two shots, and a score trend with regression flags.
+4. **Board.** Run `node <skill-dir>/scripts/build_board.mjs <ws>/log.json` (add `--inline` for a single shareable file). It shows the variant grid, the score table, the champion lineage, an A/B overlay across any two shots, and a score trend with regression flags. The JavaScript is bundled with the skill; no compiler or npm installation is needed for board generation.
 5. **Decide with the user.** Give a ≤5-line verdict: the recommended champion, the best idea worth stealing from each other variant, and the one question that would settle a close call. **The user chooses**, or asks for a merge or tweak.
 6. **Record** scores, Nielsen counts, user feedback (verbatim, short), status (`champion`/`challenger`/`merged`/`dropped`/`parked`) and lineage (`parent`, `merged_from`, one-line delta) in `<ws>/log.json`.
    - OpenSpec: add an iteration summary to `design.md` and re-validate.

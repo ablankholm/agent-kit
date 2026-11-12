@@ -1,6 +1,6 @@
 {
   "name": "ui-ux-design-council",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Meta UI/UX design orchestrator: routes to impeccable, Nielsen audits, UI/UX Pro Max and the native frontend skill; builds competing variants and compares them within and across iterations; integrates with OpenSpec and Haft/Quint.",
   "author": { "name": "Anders Blankholm", "url": "https://github.com/ablankholm" },
   "homepage": "https://github.com/ablankholm/agent-kit/tree/main/plugins/ui-ux-design-council",

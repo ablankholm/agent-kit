@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "strict": true,
+    "noEmitOnError": true,
+    "forceConsistentCasingInFileNames": true,
+    "newLine": "lf",
+    "rootDir": "src",
+    "outDir": "plugins/ui-ux-design-council/skills/ui-ux-design-council/scripts"
+  },
+  "include": ["src/**/*.mts"]
+}

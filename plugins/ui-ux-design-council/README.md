@@ -27,8 +27,8 @@ First [add the agent-kit marketplace](../../README.md#install), then [install th
 ## Requirements
 
 - Bash for cached dependency detection.
-- Python 3.9+ for `scripts/build_board.py`, which generates the HTML comparison board from the iteration log and screenshots. It uses only the standard library, with no pip dependencies. Installing or loading the skill does not require Python.
-- Node.js 18+ and Playwright in the target project for automated screenshots (optional; host browser tools work too).
+- Node.js 18+ for `scripts/build_board.mjs`, which generates the HTML comparison board from the iteration log and screenshots. It uses only Node's built-in modules. The TypeScript source is compiled before release; skill users need no compiler, build step, or npm dependencies for board generation.
+- Playwright in the target project for automated screenshots (optional; host browser tools work too).
 - The specialist skills above are optional separate installations. The council offers to install missing seats and uses built-in fallbacks if you decline.
 
 ## Files
@@ -39,5 +39,5 @@ The paths below are relative to `skills/ui-ux-design-council/`.
 - `references/`: skill registry, intake, OpenSpec/Haft integration, arbitration rules, comparison method, fallbacks
 - `scripts/detect_deps.sh`: cached dependency detection
 - `scripts/capture.mjs`: parity screenshots via Playwright
-- `scripts/build_board.py`: comparison board
+- `scripts/build_board.mjs`: comparison board (compiled from the repository's `src/build_board.mts`)
 - `assets/log.example.json`: example iteration log

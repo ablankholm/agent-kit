@@ -48,7 +48,7 @@ Variant IDs, states, and themes must begin with a letter or digit and contain on
 
 Ask once whether to commit it; the default is to gitignore `shots/` and commit `log.json`. With OpenSpec, also put a short iteration summary (champion, what changed, scores trend) in the change's `design.md` and link the log. With Haft, link any DecisionRecord IDs from the relevant iteration.
 
-Review screenshots, feedback, and logs for private product information before committing or sharing them. `build_board.py --inline` embeds screenshots in a single HTML file, so the board inherits their sensitivity.
+Review screenshots, feedback, and logs for private product information before committing or sharing them. `node <skill-dir>/scripts/build_board.mjs <workspace>/log.json --inline` embeds screenshots in a single HTML file, so the board inherits their sensitivity.
 
 ### `log.json` schema
 
@@ -91,7 +91,7 @@ Review screenshots, feedback, and logs for private product information before co
 
 1. **Capture** all variants under parity.
 2. **Judge on the screenshots** with the rubric (`arbitration.md`), the Nielsen seat and impeccable's audit. Where you can, score each variant before re-reading its thesis, so the pitch doesn't bias the score.
-3. **Build the board:** `python3 <skill-dir>/scripts/build_board.py <workspace>/log.json`. It shows a grid of variants (columns) × state/breakpoint (rows), a score table, and an A/B overlay for any two shots.
+3. **Build the board:** `node <skill-dir>/scripts/build_board.mjs <workspace>/log.json`. It shows a grid of variants (columns) × state/breakpoint (rows), a score table, and an A/B overlay for any two shots. Node 18+ is sufficient; the installed skill includes compiled JavaScript and needs no build step or npm dependencies for this command.
 4. **Show the user** the board and a ≤5-line verdict: recommended champion, the best idea worth stealing from each loser, and the one question that would decide a close call.
 5. **Record** the scores, Nielsen counts, user feedback (verbatim, short) and the decision in `log.json`.
 

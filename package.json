@@ -1,0 +1,19 @@
+{
+  "name": "agent-kit",
+  "private": true,
+  "type": "module",
+  "description": "Shared agent skills for Codex and Claude Code",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "build:check": "node scripts/check-build.mjs",
+    "test": "node --test",
+    "validate": "npm run build:check && node scripts/validate.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "18.19.130",
+    "typescript": "5.9.3"
+  }
+}

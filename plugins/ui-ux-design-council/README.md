@@ -1,6 +1,6 @@
 # UI/UX Design Council
 
-A meta UI/UX design skill for Claude Code and Codex. It turns short goals into reasoned, repo-grounded interface design that doesn't look like default agent output. It does this by orchestrating specialist skills and making them compete:
+A UI/UX design skill in the [agent-kit collection](../../README.md), available for Claude Code and Codex. It turns short goals into reasoned, repo-grounded interface design that doesn't look like default agent output. It does this by orchestrating specialist skills and making them compete:
 
 | Seat | Skill | Role |
 |---|---|---|
@@ -22,11 +22,13 @@ A meta UI/UX design skill for Claude Code and Codex. It turns short goals into r
 
 ## Install
 
-The repo-level install commands are in the [repo README](../../README.md#install). After installing, ask for the skill by name (`ui-ux-design-council`), or describe a UI/UX task and let it trigger.
+First [add the agent-kit marketplace](../../README.md#install), then [install this plugin](../../README.md#install-this-plugin). After installing, ask for the skill by name (`ui-ux-design-council`), or describe a UI/UX task and let it trigger.
 
 ## Requirements
 
-- `bash`, `python3` (3.9+). Node.js 18+ and Playwright in the target project for automated screenshots (optional; host browser tools work too).
+- Bash for cached dependency detection.
+- Python 3.9+ for `scripts/build_board.py`, which generates the HTML comparison board from the iteration log and screenshots. It uses only the standard library, with no pip dependencies. Installing or loading the skill does not require Python.
+- Node.js 18+ and Playwright in the target project for automated screenshots (optional; host browser tools work too).
 - The specialist skills above are optional separate installations. The council offers to install missing seats and uses built-in fallbacks if you decline.
 
 ## Files

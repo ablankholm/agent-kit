@@ -1,0 +1,26 @@
+{
+  "name": "ablankholm",
+  "owner": {
+    "name": "Anders Blankholm",
+    "url": "https://github.com/ablankholm"
+  },
+  "metadata": {
+    "description": "Shared agent skills for Codex and Claude Code."
+  },
+  "plugins": [
+    {
+      "name": "ui-ux-design-council",
+      "source": "./plugins/ui-ux-design-council",
+      "description": "Meta UI/UX design orchestrator: routes to impeccable, Nielsen audits, UI/UX Pro Max and the native frontend skill; builds competing variants and compares them within and across iterations; integrates with OpenSpec and Haft/Quint.",
+      "category": "design",
+      "tags": [
+        "ui",
+        "ux",
+        "design",
+        "frontend",
+        "nielsen",
+        "openspec"
+      ]
+    }
+  ]
+}

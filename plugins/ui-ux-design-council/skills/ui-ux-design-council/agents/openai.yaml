@@ -1,0 +1,4 @@
+interface:
+  display_name: "UI/UX Design Council"
+  short_description: "Compare interface designs and refine the winner"
+  default_prompt: "Use $ui-ux-design-council to design or review this interface, compare alternatives, and implement the chosen direction."

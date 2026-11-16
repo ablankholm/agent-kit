@@ -44,7 +44,12 @@ Details: `references/skill-registry.md` (seats, install, scope) and `references/
    - Never install without explicit consent. Note that these are third-party skills the agent will execute.
    - After installing, run `--recheck <key>` (or `--refresh` after several installs). Some hosts need a restart to see new skills.
    - If the user declines, run `--decline <key>` so you don't ask again in this repo, then use the seat's fallback from `references/fallbacks.md`.
-5. **Frameworks:**
+5. **Open the scratch workspace before anything is written to disk:** `bash <skill-dir>/scripts/workspace.sh init <feature>` from the project root.
+   - **Where artifacts land follows where the skill is installed.** Installed inside the repo, they go to `<repo>/.ui-ux-design-council/` behind a self-ignoring `.gitignore` (`*`): shared tooling, shared artifacts, still zero diff noise. Installed globally, they go to `$XDG_STATE_HOME/ui-ux-design-council/<repo>-<hash>/` and the repo is never written to at all. `init` prints the path. Override with `--local` / `--global`, or set `UIUX_COUNCIL_WORKSPACE`.
+   - **Variant source code is the exception: it always lives in the repo's source tree**, because it has to compile against the real app with the real tokens. Register each throwaway directory the moment you create it, with `bash <skill-dir>/scripts/workspace.sh scratch src/components/__variants__/<feature>` or `scratch --worktree ../<repo>-B`. That ignores it and queues it for teardown. Unregistered scratch is scratch nobody will clean up.
+   - Say in one line where artifacts are going, that they are scratch, and that a workspace nobody touches for 14 days gets its screenshots reclaimed later (the `log.json` ledger always survives). That sentence is the user's chance to say "keep this one", which you record with `workspace.sh policy --expire never`.
+   - Run `bash <skill-dir>/scripts/workspace.sh gc` once at preflight. It only prints when an old workspace from a previous session is collectable. If it does, offer it in one line and run `gc --yes` only on a yes. Don't ask the user to add ignore rules by hand.
+6. **Frameworks:**
    - `IN-USE` (repo evidence) → you must use it; see Step 2.
    - `AVAILABLE` (global only, no repo evidence) → ask once whether to use it for this work. Cache a "no" with `--decline <key>`.
    - `ABSENT` → don't mention it.
@@ -120,15 +125,25 @@ Run this loop for every iteration. Follow `references/comparison.md` for the mec
 6. **Record** scores, Nielsen counts, user feedback (verbatim, short), status (`champion`/`challenger`/`merged`/`dropped`/`parked`) and lineage (`parent`, `merged_from`, one-line delta) in `<ws>/log.json`.
    - OpenSpec: add an iteration summary to `design.md` and re-validate.
    - Haft: bind a DecisionRecord via `h-decide` only on the user's direct request.
+7. **Offer a reclaim, never decide one.** From iteration 3, run `bash <skill-dir>/scripts/workspace.sh prune --keep 2 --min 200` right after recording. It is a dry run: it prints a plan and deletes nothing. It also stays silent below 200MB, so it only speaks up when the figure is worth the user's attention.
+   - When it prints a plan, put the choice to the user in one line with the figure and the cost: "the losing variants from iterations 1 to 4 are 1.4G; reclaim them? the last two iterations and the whole champion lineage stay, but B1 and D2 screenshots go for good." Use the host's structured question tool if it has one.
+   - **Run `prune --yes` only on an explicit yes.** No answer is a no. Mid-session history is exactly what a user may want to re-open two rounds later ("show me B1 again"), and a surprise deletion there is the failure mode worth protecting against, not a few hundred megabytes.
+   - If they decline, record it with `workspace.sh policy --prune off` so the council stops raising it for this workspace, and say that it will stop asking.
+   - Nothing is lost by declining: the workspace's expiry policy reclaims unattended scratch later anyway, and `log.json` keeps the scores and lineage regardless.
 
 **Across iterations (co-evolution):** the next iteration carries the refined champion plus 0 to N challengers, which can be fresh ideas, merges, or revived parked variants. Always compare against the previous champion's shots. Prefer one major change per lineage per iteration, and flag regressions even when the total score improves. Keep the rubric stable; if the brief changes, re-score the champion. Stop when the user is satisfied, when gains are <5% over two iterations with no critical or major issues, or when the remaining differences are taste rather than usability.
 
-Workspace: `.ui-ux-design-council/<feature>/` (`log.json`, `board.html`, `shots/`). Ask once whether to commit it; the default is to commit `log.json` and gitignore `shots/`.
+Workspace: `<workspace>/<feature>/` (`log.json`, `board.html`, `shots/`), created by `workspace.sh init` at the location its install scope dictates, and invisible to git either way. Nothing in it is committed by default, so a long session with a dozen discarded variants produces zero diff noise. If the user wants the ledger kept as a record, promote that one file deliberately at hand-off: `git add -f <path>/log.json` for a repo-local workspace, or copy it in from the global one.
 
 ## Step 6: Finalize the champion
 
 - OpenSpec in use: implement through `/opsx:apply`, checking off `tasks.md`.
-- Promote the champion into the real code path using the native builder skill, guided by `impeccable`'s craft command. **Delete losing variants, the variant switch and the temporary fixtures.** Keep `log.json` and screenshots.
+- Promote the champion into the real code path using the native builder skill, guided by `impeccable`'s craft command. The champion's code is the only thing that leaves the scratch workspace.
+- **Recommend teardown, and let the user decide.** Run `bash <skill-dir>/scripts/workspace.sh status` first: it lists every registered scratch root with its size and flags tracked files that still reference one. Such a reference is usually a leftover variant-switch import, which breaks the build for everyone else once the champion is committed, so remove the hook regardless of what the user decides about the rest.
+  Then recommend the teardown plainly, because this is the moment it costs least: the decision is made, the champion is in the real code path, and the losing variants are now dead code that can only confuse the next reader. Show the figure from `status`, say what disappears (losing variant code, the switch, fixtures, worktrees, prototype `node_modules`) and what survives (screenshots, boards and `log.json`, kept for Step 7). Run `bash <skill-dir>/scripts/workspace.sh clean --keep-shots --yes` once they agree.
+- If they want the variants kept for now, that is their call: leave them, say the expiry policy will reclaim the workspace's scratch in 14 untouched days, and offer `workspace.sh policy --expire never` if they want it kept indefinitely.
+- `clean` refuses to delete anything git tracks, so a scratch root you accidentally committed is reported rather than destroyed. Resolve those by hand.
+- Check the result: `git status` should now show only the champion's real-code changes.
 - Existing tokens and components come first. Every new one needs a one-line justification and must be added to the system properly.
 - Build all states, with realistic content.
 
@@ -142,6 +157,8 @@ Capture the finalized UI as one last iteration with only the champion, so it's c
 ## Step 8: Polish and hand off
 
 - Run `impeccable` polish (and distill if the UI is busy). Update `DESIGN.md` with any new tokens or patterns.
+- **Close the workspace, with the user's say-so.** Once they have seen the final board, recommend `bash <skill-dir>/scripts/workspace.sh clean --yes`: it drops the screenshots and the board and keeps each feature's `log.json`. Name the figure it reclaims and the fact that boards are regenerable from the ledger plus a re-capture. Offer `--all` if they don't want the ledger either, and `git add -f <path>/log.json` if they want it committed instead.
+- If they decline or don't answer, leave it: the workspace expires on its own policy and a later `gc` reclaims the scratch while keeping the ledger, so an unanswered question costs them disk for a fortnight, never their design history.
 - OpenSpec: leave the change ready for `/opsx:archive`. Don't archive unless asked.
 - Summary:
   - what was built
@@ -149,7 +166,7 @@ Capture the finalized UI as one last iteration with only the champion, so it's c
   - key decisions and the goal or principle each traces to
   - which seat won which argument
   - remaining issues and seats that ran on fallbacks
-  - artifacts written, including the board path
+  - artifacts written, including the board path, and what teardown removed (variants, worktrees, shots, disk reclaimed)
 
 ## Invoking skills across hosts
 

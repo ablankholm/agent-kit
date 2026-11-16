@@ -16,14 +16,16 @@ Pick the lightest isolation that fits how different the variants are:
 
 | Isolation | Use when | How |
 |---|---|---|
-| **In-app variant switch** (default) | Variants of one screen or component sharing data and routes | Each variant is its own component file under a clearly temporary folder (e.g. `src/**/__variants__/<feature>/A.tsx`), selected by a dev-only switch (`?variant=A`, a dev toolbar, or a flag). The parent renders `variants[current]`. Nothing ships unless chosen. |
+| **In-app variant switch** (default) | Variants of one screen or component sharing data and routes | Each variant is its own component file under one throwaway folder (e.g. `src/**/__variants__/<feature>/A.tsx`) registered with `workspace.sh scratch` the moment you create it, selected by a dev-only switch (`?variant=A`, a dev toolbar, or a flag). The parent renders `variants[current]`. Nothing ships unless chosen. |
 | **Storybook stories** | Component-level work in a repo that already uses Storybook | One story per variant × state; capture from Storybook URLs |
-| **Git worktrees / branches** | Structural differences (routing, data loading, layout shell) that can't coexist in one build | `git worktree add ../<repo>-B design/<feature>/B`; run each on its own port |
+| **Git worktrees / branches** | Structural differences (routing, data loading, layout shell) that can't coexist in one build | `git worktree add ../<repo>-B design/<feature>/B`, then `workspace.sh scratch --worktree ../<repo>-B` so teardown removes it; run each on its own port |
 
 Rules:
 - Variants must not break the main build or tests. Keep the switch dev-only.
 - Add **state fixtures** so every variant can be put into each parity state on demand, e.g. `?state=empty|loading|error|overflow|default` backed by mock data. Without this, the comparison isn't fair.
-- **Clean up at finalization:** delete losing variants and the switch, and fold the winner into the real code path. Screenshots and the log stay.
+- **Keep every variant out of git.** `workspace.sh scratch <dir>` drops a `.gitignore` containing `*` into the directory, so the variants compile and render but never appear in `git status` and never reach a commit. Over a long session this is the difference between a readable diff and forty untracked files for designs you discarded.
+- **One hazard to watch:** the variant switch usually lives in a tracked parent component, and a tracked file importing an ignored variant breaks the build for anyone else who checks the branch out. `workspace.sh status` flags exactly this. Keep the switch behind a dev-only guard and remove it at finalization.
+- **Clean up at finalization:** fold the winner into the real code path, then `workspace.sh clean --keep-shots --yes` to delete the losing variants, the switch files, the fixtures and any variant worktrees in one step. Screenshots and the log stay for the final review; `workspace.sh clean --yes` drops those too at hand-off.
 
 ## 2. Capture under parity
 
@@ -35,18 +37,77 @@ Every variant in an iteration is captured with the identical parity set. Default
 
 ## 3. The design workspace
 
-Per feature: `.ui-ux-design-council/<feature>/` in the repo root. Start from `assets/log.example.json`.
+Create it with `bash <skill-dir>/scripts/workspace.sh init <feature>` before any council file is written, and start `log.json` from `assets/log.example.json`.
+
+**Where it lives follows where the skill is installed**, which `init` resolves and prints:
+
+| Skill installed | Workspace | Why |
+|---|---|---|
+| In the repo (`<repo>/.claude/skills/…`, a plugin vendored into the project) | `<repo>/.ui-ux-design-council/<feature>/` | Tooling the team shares should put its artifacts where the team can see them |
+| Globally (`~/.claude/skills/…`, `~/.codex/skills/…`) | `$XDG_STATE_HOME/ui-ux-design-council/<repo>-<hash>/<feature>/` | Personal tooling used across many repos; the project directory is never written to |
+
+Force either with `--local` / `--global` on any subcommand, or set `UIUX_COUNCIL_WORKSPACE` to a directory you control. A global workspace records the repo it belongs to in `.repo`, which is what `workspace.sh gc` uses later to find workspaces whose repo is gone.
+
+**Variant source code does not move.** It has to compile against the real app with the real tokens, so it stays in the source tree and `workspace.sh scratch <dir>` keeps it ignored and registered for teardown. The workspace holds artifacts; the source tree holds the throwaway code that produced them.
+
+A repo-local workspace is scratch by construction: `init` writes `.ui-ux-design-council/.gitignore` containing `*`, which ignores the directory's whole contents including itself, so:
+
+- the repo's own `.gitignore` is never edited (no stray diff, no bikeshedding about an ignore rule in review),
+- screenshots, boards, prototype `node_modules` and discarded variants never show up in `git status`,
+- nothing can be committed by accident; keeping a file is an explicit `git add -f <path>`.
+
+Session lifecycle:
+
+| When | Command | Effect |
+|---|---|---|
+| Step 0, before any file | `workspace.sh init <feature>` | Self-ignoring workspace, ready to fill |
+| When a variant dir or worktree is created | `workspace.sh scratch <dir>` / `scratch --worktree <dir>` | Registered for teardown, ignored by git |
+| Any time | `workspace.sh status` | Sizes, what git can see, tracked files still referencing scratch |
+| After recording each iteration, from iteration 3 | `workspace.sh prune --keep 2 --min 200` | Prints an offer: the shots of variants older iterations already rejected. Silent under 200MB, deletes nothing |
+| When the user answers a reclaim offer | `workspace.sh policy --prune off` / `--expire never` | Records "stop asking" or "keep this workspace", so the answer survives the session |
+| Finalization (Step 6), on the user's yes | `workspace.sh clean --keep-shots --yes` | Variants, switch, fixtures, worktrees, prototype builds removed |
+| Hand-off (Step 8), on the user's yes | `workspace.sh clean --yes` (or `--all`) | Everything in each feature directory goes except `log.json` (`--all` keeps nothing) |
+| Preflight, and occasionally across projects | `workspace.sh gc` | Offers up workspaces whose repo is gone, or that are past their own expiry |
+
+### Who decides what gets deleted
+
+Every destructive command here is a dry run until `--yes`, and the council runs them that way deliberately. The rule is:
+
+1. **The council never deletes design history on its own.** Mid-session reclaims are offered with the figure and the cost, and acted on only with an explicit yes. A non-answer is a no. Someone who wants to re-open `B1` two rounds later should find it there.
+2. **At the final decision it recommends cleanup strongly, and still asks.** That is the moment teardown is cheapest: the champion is in the real code path, and the losing variants are dead code that can only mislead the next reader. The user can still say no.
+3. **The standing disposition for unattended scratch is reclaim, not keep.** Every workspace carries an expiry (14 untouched days by default, in `.policy`). A session that is abandoned, compacted away or simply forgotten has its screenshots reclaimed by a later `gc`, with `log.json` kept. Nobody has to see a message for a machine to stay clean; the cost of a missed question is a fortnight of disk, never the design record.
+4. **A recorded answer outranks a sweep.** `policy --expire never` survives `gc --older-than 0`; only an explicit `--force` overrides it. `policy --prune off` stops the mid-session offers for good.
+
+`gc` never touches the repo's source tree, only workspaces. Registered variant directories in the source tree are removed by `clean`, which is always a deliberate act.
+
+### Pruning mid-session
+
+A long session is the problem case: twelve iterations at three variants, nine parity shots each, is thousands of PNGs for designs that were rejected in round two. `prune --keep 2` reclaims them without breaking anything the board still draws. It keeps:
+
+- every iteration in the newest N (default 2), untouched, including its challengers;
+- every variant recorded as `champion` or `parked`, in any iteration;
+- the champion's entire ancestry through `parent` and `merged_from`, because the lineage view renders `A1 → A2 → A3` side by side across iterations;
+- anything whose status is missing or unrecognised, on the principle that prune never guesses.
+
+It drops the shots of rejected challengers in older iterations, orphan shot directories with no matching variant, and stray inline board files over 20MB that are not the current `board.html` (an `--inline` board embeds every PNG as base64, so these are the single largest files the council produces). Old boards then show "no shot" in those cells. Scores, feedback and lineage live in `log.json` and are never touched, so the trend table and the decision history stay complete.
+
+`--min MB` is what makes the offer non-annoying: below the threshold prune says so and exits, so the council only raises the subject when the number justifies interrupting. Never run `--yes` without asking.
+
+Treat a feature directory as disposable: `clean` keeps `log.json` and nothing else, so anything worth keeping (a token, a pattern, a decision) belongs in `DESIGN.md`, the spec or the real code path before teardown. `clean` prints a plan with sizes and a total before it acts, deletes nothing without `--yes`, refuses any path git tracks unless `--force`, and prunes the empty parent directories it leaves behind. Set `UIUX_COUNCIL_WORKSPACE` to a path outside the repo to keep the working tree completely untouched; the same commands then operate there.
 
 Variant IDs, states, and themes must begin with a letter or digit and contain only letters, digits, dots, underscores, and hyphens. Iteration IDs must be nonnegative integers. Helpers reject paths or symlinks that escape the workspace. Board output defaults to `board.html`; a custom `--out` path is relative to the log directory and must stay inside it.
 
 ```
-.ui-ux-design-council/<feature>/
-  log.json        # the lineage ledger (source of truth for comparisons)
-  board.html      # generated comparison board
-  shots/iter-01/A1/375-default.png …
+.ui-ux-design-council/
+  .gitignore            # contains "*", so git sees nothing below
+  .scratch-manifest     # registered scratch roots and worktrees, for teardown
+  <feature>/
+    log.json            # the lineage ledger (source of truth for comparisons)
+    board.html          # generated comparison board
+    shots/iter-01/A1/375-default.png …
 ```
 
-Ask once whether to commit it; the default is to gitignore `shots/` and commit `log.json`. With OpenSpec, also put a short iteration summary (champion, what changed, scores trend) in the change's `design.md` and link the log. With Haft, link any DecisionRecord IDs from the relevant iteration.
+Nothing here is committed by default. If the user wants the lineage kept as a durable record, promote the ledger alone with `git add -f .ui-ux-design-council/<feature>/log.json`; the screenshots it references are throwaway. With OpenSpec, also put a short iteration summary (champion, what changed, scores trend) in the change's `design.md` and link the log. With Haft, link any DecisionRecord IDs from the relevant iteration.
 
 Review screenshots, feedback, and logs for private product information before committing or sharing them. `node <skill-dir>/scripts/build_board.mjs <workspace>/log.json --inline` embeds screenshots in a single HTML file, so the board inherits their sensitivity.
 

@@ -5,7 +5,7 @@
     "url": "https://github.com/ablankholm"
   },
   "metadata": {
-    "description": "Shared agent skills for Codex and Claude Code."
+    "description": "Reusable agent skills and hooks for Codex and Claude Code, with support listed per plugin."
   },
   "plugins": [
     {
@@ -21,6 +21,13 @@
         "nielsen",
         "openspec"
       ]
+    },
+    {
+      "name": "kubectl-guard",
+      "source": "./plugins/kubectl-guard",
+      "description": "Claude Code approval guard for mutating or ambiguous kubectl commands, with trusted local-context handling and native permissions preserved.",
+      "category": "development",
+      "tags": ["kubernetes", "kubectl", "hooks", "permissions"]
     }
   ]
 }

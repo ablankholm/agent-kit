@@ -7,6 +7,7 @@ import {
 } from "node:fs";
 import { basename, delimiter, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { validatePlugins } from "./lib/validate-plugins.mjs";
 
 const root = realpathSync(resolve(dirname(fileURLToPath(import.meta.url)), ".."));
 const ignored = new Set([".git", "node_modules", "__pycache__", ".venv"]);
@@ -44,71 +45,10 @@ function inside(base, path) {
   return rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
 }
 
-function localPath(base, value, label) {
-  if (typeof value !== "string" || !value.startsWith("./") || value.includes("\\")) {
-    fail(`${label}: expected a relative path beginning with ./`);
-    return null;
-  }
-  const path = resolve(base, value);
-  if (!inside(base, path)) {
-    fail(`${label}: path escapes its package`);
-    return null;
-  }
-  if (!existsSync(path) || !inside(base, realpathSync(path))) {
-    fail(`${label}: path is missing or resolves outside its package`);
-    return null;
-  }
-  return path;
-}
-
-function catalogue(manifest, host) {
-  const entries = new Map();
-  if (!Array.isArray(manifest.plugins)) {
-    fail(`${host}: marketplace must have a plugins array`);
-    return entries;
-  }
-  for (const plugin of manifest.plugins) {
-    if (!plugin || typeof plugin.name !== "string" || !plugin.name) {
-      fail(`${host}: plugin is missing its name`);
-      continue;
-    }
-    if (entries.has(plugin.name)) fail(`${host}: duplicate plugin ${plugin.name}`);
-    const source = host === "Claude" ? plugin.source : plugin.source?.path;
-    if (host === "Codex" && plugin.source?.source !== "local") {
-      fail(`${host}: ${plugin.name} must use a local marketplace source`);
-    }
-    entries.set(plugin.name, source);
-  }
-  return entries;
-}
-
 const files = walk(root);
 const json = new Map(files.filter((path) => extname(path) === ".json").map((path) => [path, readJSON(path)]));
 const getJSON = (path) => json.has(path) ? json.get(path) : readJSON(path);
-const claude = catalogue(getJSON(join(root, ".claude-plugin/marketplace.json")), "Claude");
-const codex = catalogue(getJSON(join(root, ".agents/plugins/marketplace.json")), "Codex");
-if (JSON.stringify([...claude.keys()].sort()) !== JSON.stringify([...codex.keys()].sort())) {
-  fail("marketplaces list different plugins");
-}
-const pluginPaths = [];
-for (const [name, source] of claude) {
-  if (codex.get(name) !== source) fail(`${name}: marketplace source paths differ`);
-  const path = localPath(root, source, `${name}: marketplace source`);
-  if (!path) continue;
-  pluginPaths.push(path);
-  const cm = getJSON(join(path, ".claude-plugin/plugin.json"));
-  const xm = getJSON(join(path, ".codex-plugin/plugin.json"));
-  for (const [host, manifest] of [["Claude", cm], ["Codex", xm]]) {
-    if (manifest.name !== name) fail(`${name}: ${host} manifest has a different name`);
-  }
-  if (cm.version !== xm.version) fail(`${name}: plugin versions differ between hosts`);
-  if (!/^\d+\.\d+\.\d+$/.test(xm.version ?? "")) fail(`${name}: version must use major.minor.patch`);
-  if (xm.skills !== "./skills/") fail(`${name}: expected shared ./skills/ directory`);
-  localPath(path, xm.skills, `${name}: skills`);
-  const skillsDirectory = join(path, "skills");
-  const hasSkill = files.some((file) => basename(file) === "SKILL.md" && dirname(dirname(file)) === skillsDirectory);
-  if (!hasSkill && !existsSync(join(path, "hooks"))) fail(`${name}: plugin has no skills or hooks`);
-}
+const pluginPaths = validatePlugins({ root, files, readJSON: getJSON, fail });
 
 const unquote = (value) => {
   const first = value[0];

@@ -2,7 +2,7 @@
   "name": "agent-kit",
   "private": true,
   "type": "module",
-  "description": "Shared agent skills for Codex and Claude Code",
+  "description": "Reusable agent skills and hooks with per-plugin host support",
   "engines": {
     "node": ">=18"
   },

@@ -1,6 +1,6 @@
 # agent-kit
 
-An independent collection and GitHub marketplace of reusable skills and hooks. Add the marketplace once, then install the plugins you want. Each plugin documents its supported agents and requirements.
+An independent collection of reusable skills, hooks and configuration templates. Add the GitHub marketplace once, then install the plugins you want. Each plugin documents its supported agents and requirements.
 
 ## Available plugins
 
@@ -10,6 +10,15 @@ An independent collection and GitHub marketplace of reusable skills and hooks. A
 | [Kubectl Guard](plugins/kubectl-guard/README.md) | `kubectl-guard` | Claude Code | Require explicit mutation targets, confirm risky kubectl commands, and check installation health. |
 
 Each plugin's README covers what it does, how to install it, what it requires, and what it reads and writes.
+
+## Configuration templates
+
+| Template | Purpose |
+|---|---|
+| [Codex AGENTS.md](configs/codex/AGENTS.example.md) | Personal preferences for communication, delegation, tools and verification. |
+| [OpenSpec configuration](configs/openspec/config.example.yaml) | Planning rules and guidance for implementation and archiving. |
+
+Review and merge these examples into your own setup. Follow the [configuration guide](configs/README.md) for scope, compatibility and adoption. Installing a plugin does not install these templates.
 
 ## Install
 

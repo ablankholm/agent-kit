@@ -240,14 +240,14 @@ test("doctor locates project settings from nested working directories", (t) => {
   assert.equal(result(runDoctor({ ...f.options, cwd: nested }), "installation").status, "pass");
 });
 
-test("doctor reports legacy and duplicate guard hooks without disclosing commands or changing settings", (t) => {
+test("doctor reports duplicate guard hooks without disclosing commands or changing settings", (t) => {
   const f = fixture(t);
-  f.settings("user", hookSettings('SECRET=credential bash ~/.claude/hooks/kubectl-safety-hook.sh'));
+  f.settings("user", hookSettings('SECRET=credential bash ~/.claude/hooks/kubectl-guard.sh'));
   f.settings("project", hookSettings('bash /plugins/kubectl-guard/scripts/kubectl-guard.sh'));
   f.settings("local", hookSettings('bash unrelated-safe-hook.sh'));
   const report = runDoctor(f.options);
-  assert.equal(result(report, "legacy registration").status, "fail");
-  assert.match(result(report, "legacy registration").detail, /2 direct guard registration/);
+  assert.equal(result(report, "direct registration").status, "fail");
+  assert.match(result(report, "direct registration").detail, /2 direct guard registration/);
   assert.ok(!JSON.stringify(report).includes("credential"));
   assert.match(readFileSync(join(f.userDir, "settings.json"), "utf8"), /SECRET=credential/);
 });
@@ -261,16 +261,6 @@ test("invalid policy blocks a clean report without exposing its contents", (t) =
   assert.ok(!JSON.stringify(report).includes("secret"));
   writeFileSync(path, JSON.stringify({ schemaVersion: 1, trustedTargets: [{ context: "lab", server: "https://localhost:6443" }] }));
   assert.match(result(runDoctor(f.options), "policy").detail, /1 explicit trusted target/);
-});
-
-test("legacy context patterns are reported as inert, never treated as trust", (t) => {
-  const f = fixture(t);
-  writeFileSync(join(f.configDir, "kubectl-guard-local-contexts"), "# old configuration\nkind-*\nprivate-secret-* # old\n");
-  const report = runDoctor(f.options);
-  assert.equal(result(report, "legacy patterns").status, "warn");
-  assert.match(result(report, "legacy patterns").detail, /2 legacy context pattern\(s\) are inert/);
-  assert.equal(result(report, "policy").detail, "Strict defaults: no mutation exceptions configured.");
-  assert.ok(!JSON.stringify(report).includes("private-secret"));
 });
 
 test("CLI installation failures and disabled plugins remain distinct from successful self-checks", (t) => {

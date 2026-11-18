@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Keep the legacy controls usable even when the evaluator cannot start.
+# Keep the disable controls usable even when the evaluator cannot start.
 guard_config_dir="${KUBECTL_GUARD_CONFIG_DIR:-${CLAUDE_CONFIG_DIR:-${HOME:-}/.claude}}"
 if [ "${KUBECTL_GUARD:-}" = off ] || [ -f "$guard_config_dir/kubectl-guard.disabled" ]; then
   exit 0

@@ -70,7 +70,7 @@ Design sessions create working alternatives, screenshots and a comparison board.
 
 - **Storage:** a global install keeps artifacts in a project-specific directory under `$XDG_STATE_HOME/ui-ux-design-council/`, defaulting to `~/.local/state/ui-ux-design-council/`. A repo-local install uses `<repo>/.ui-ux-design-council/`, which is ignored by Git. Set `UIUX_COUNCIL_WORKSPACE` to choose another storage root.
 - **Project edits:** temporary design variants and the chosen implementation can change project files, regardless of where screenshots and boards are stored.
-- **Cleanup:** deletion requires your approval. Inactive workspaces become eligible for cleanup after 14 days; this is not a timer that deletes files automatically. Cleanup of expired artifacts preserves the scores, feedback and design log.
+- **Cleanup:** deletion requires your approval. Inactive workspaces become eligible for cleanup after 14 days; nothing is deleted automatically. Ordinary expiry cleanup keeps the scores, feedback and design log. If the project is gone or the workspace no longer identifies its project, cleanup can remove the whole workspace, including its logs. The council explains the planned deletion before asking.
 - **Keeping your work:** ask to keep a session indefinitely to disable its expiry policy.
 
 Screenshots, logs, feedback and boards can contain private product information. Review them before sharing. An `--inline` board embeds every screenshot in the HTML, so it inherits their sensitivity.

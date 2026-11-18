@@ -25,7 +25,7 @@ Rules:
 - Add **state fixtures** so every variant can be put into each parity state on demand, e.g. `?state=empty|loading|error|overflow|default` backed by mock data. Without this, the comparison isn't fair.
 - **Keep every variant out of git.** `workspace.sh scratch <dir>` drops a `.gitignore` containing `*` into the directory, so the variants compile and render but never appear in `git status` and never reach a commit. Over a long session this is the difference between a readable diff and forty untracked files for designs you discarded.
 - **One hazard to watch:** the variant switch usually lives in a tracked parent component, and a tracked file importing an ignored variant breaks the build for anyone else who checks the branch out. `workspace.sh status` flags exactly this. Keep the switch behind a dev-only guard and remove it at finalization.
-- **Clean up at finalization:** fold the winner into the real code path, then `workspace.sh clean --keep-shots --yes` to delete the losing variants, the switch files, the fixtures and any variant worktrees in one step. Screenshots and the log stay for the final review; `workspace.sh clean --yes` drops those too at hand-off.
+- **Clean up at finalization:** fold the winner into the real code path, then, with the user's approval, run `workspace.sh clean --keep-shots --yes` to delete the losing variants, the switch files, the fixtures and any variant worktrees in one step. Screenshots, the board and the log stay for the final review. At hand-off, approved `workspace.sh clean --yes` removes screenshots and the board but keeps `log.json`; `--all` removes the log too.
 
 ## 2. Capture under parity
 
@@ -44,7 +44,7 @@ Create it with `bash <skill-dir>/scripts/workspace.sh init <feature>` before any
 | Skill installed | Workspace | Why |
 |---|---|---|
 | In the repo (`<repo>/.claude/skills/…`, a plugin vendored into the project) | `<repo>/.ui-ux-design-council/<feature>/` | Tooling the team shares should put its artifacts where the team can see them |
-| Globally (`~/.claude/skills/…`, `~/.codex/skills/…`) | `$XDG_STATE_HOME/ui-ux-design-council/<repo>-<hash>/<feature>/` | Personal tooling used across many repos; the project directory is never written to |
+| Globally (`~/.claude/skills/…`, `~/.agents/skills/…`, or a host's plugin cache) | `${XDG_STATE_HOME:-~/.local/state}/ui-ux-design-council/<repo>-<hash>/<feature>/` | Keeps screenshots, boards and logs outside the project |
 
 Force either with `--local` / `--global` on any subcommand, or set `UIUX_COUNCIL_WORKSPACE` to a directory you control. A global workspace records the repo it belongs to in `.repo`, which is what `workspace.sh gc` uses later to find workspaces whose repo is gone.
 
@@ -75,7 +75,7 @@ Every destructive command here is a dry run until `--yes`, and the council runs 
 
 1. **The council never deletes design history on its own.** Mid-session reclaims are offered with the figure and the cost, and acted on only with an explicit yes. A non-answer is a no. Someone who wants to re-open `B1` two rounds later should find it there.
 2. **At the final decision it recommends cleanup strongly, and still asks.** That is the moment teardown is cheapest: the champion is in the real code path, and the losing variants are dead code that can only mislead the next reader. The user can still say no.
-3. **The standing disposition for unattended scratch is reclaim, not keep.** Every workspace carries an expiry (14 untouched days by default, in `.policy`). A session that is abandoned, compacted away or simply forgotten has its screenshots reclaimed by a later `gc`, with `log.json` kept. Nobody has to see a message for a machine to stay clean; the cost of a missed question is a fortnight of disk, never the design record.
+3. **Expiry makes a workspace eligible for cleanup.** The default is 14 inactive days, recorded in `.policy`. Nothing runs automatically: `gc` previews its plan, and the council needs explicit approval before adding `--yes`. For an existing repo, expiry cleanup keeps each feature's `log.json`. If the repo is gone or the workspace has no `.repo` marker, the plan removes the entire workspace, including logs. Explain that loss before requesting approval.
 4. **A recorded answer outranks a sweep.** `policy --expire never` survives `gc --older-than 0`; only an explicit `--force` overrides it. `policy --prune off` stops the mid-session offers for good.
 
 `gc` never touches the repo's source tree, only workspaces. Registered variant directories in the source tree are removed by `clean`, which is always a deliberate act.
@@ -93,7 +93,7 @@ It drops the shots of rejected challengers in older iterations, orphan shot dire
 
 `--min MB` is what makes the offer non-annoying: below the threshold prune says so and exits, so the council only raises the subject when the number justifies interrupting. Never run `--yes` without asking.
 
-Treat a feature directory as disposable: `clean` keeps `log.json` and nothing else, so anything worth keeping (a token, a pattern, a decision) belongs in `DESIGN.md`, the spec or the real code path before teardown. `clean` prints a plan with sizes and a total before it acts, deletes nothing without `--yes`, refuses any path git tracks unless `--force`, and prunes the empty parent directories it leaves behind. Set `UIUX_COUNCIL_WORKSPACE` to a path outside the repo to keep the working tree completely untouched; the same commands then operate there.
+Treat a feature directory as disposable: `clean` keeps `log.json` unless `--all` is selected, so anything worth keeping (a token, a pattern, a decision) belongs in `DESIGN.md`, the spec or the real code path before teardown. `clean` prints a plan with sizes and a total before it acts, deletes nothing without `--yes`, refuses tracked scratch directories unless `--force`, and prunes the empty parent directories it leaves behind. Set `UIUX_COUNCIL_WORKSPACE` to a path outside the repo to store artifacts there. Project edits and registered scratch directories or worktrees remain separate; `clean` can remove those registered paths wherever artifacts are stored.
 
 Variant IDs, states, and themes must begin with a letter or digit and contain only letters, digits, dots, underscores, and hyphens. Iteration IDs must be nonnegative integers. Helpers reject paths or symlinks that escape the workspace. Board output defaults to `board.html`; a custom `--out` path is relative to the log directory and must stay inside it.
 

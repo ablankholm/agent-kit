@@ -190,8 +190,6 @@ test("registered hook inspects only local configuration and preserves strict def
   assert.equal(f.run("kubectl delete pod x --context=kind-demo"),"ask");
   assert.deepEqual(JSON.parse(readFileSync(f.log)),["config","view","--minify","--output=json","--context=kind-demo"]);
   assert.equal(f.run("kubectl delete pod x"),"deny");
-  writeFileSync(join(f.config,"kubectl-guard-local-contexts"),"*\n");
-  assert.equal(f.run("kubectl delete pod x --context=kind-demo"),"ask");
   writeFileSync(join(f.config,"kubectl-guard.json"),JSON.stringify(policy));
   assert.equal(f.run("kubectl delete pod x --context=kind-demo"),null);
   assert.equal(f.run("kubectl get pods; touch sentinel"),"ask"); assert.equal(existsSync(join(f.base,"sentinel")),false);
@@ -205,7 +203,7 @@ test("unavailable, failed, malformed, oversized and timed-out resolution never c
   rmSync(join(f.bin,"kubectl")); f.env.PATH=f.bin; symlinkSync("/bin/bash",join(f.bin,"bash")); assert.equal(f.run("kubectl delete pod x --context=kind-demo"),"ask");
 });
 
-test("legacy disable switches, configuration precedence and user files are preserved", (t) => {
+test("disable switches, configuration precedence and user files are preserved", (t) => {
   const f = new Fixture(t); f.env.KUBECTL_GUARD="off";
   assert.equal(f.run("kubectl delete pod x"),null); assert.equal(f.run("ignored",{payload:"invalid JSON"}),null); delete f.env.KUBECTL_GUARD;
   const disabled=join(f.config,"kubectl-guard.disabled"); writeFileSync(disabled,"owned by user\n"); assert.equal(f.run("kubectl delete pod x"),null); assert.equal(readFileSync(disabled,"utf8"),"owned by user\n");

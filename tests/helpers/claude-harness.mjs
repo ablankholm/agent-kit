@@ -155,13 +155,6 @@ fs.appendFileSync(process.env.FIXTURE_OBSERVATIONS, JSON.stringify({
     writeFileSync(this.settings, JSON.stringify({ hooks }));
     if (options.hostFailure === "missing-launcher") {
       rmSync(join(this.plugin, "scripts/kubectl-guard.sh"));
-    } else if (options.hostFailure === "timeout") {
-      const file = join(this.plugin, "hooks/hooks.json");
-      const registration = JSON.parse(readFileSync(file, "utf8"));
-      registration.hooks.PreToolUse[0].hooks[0] = {
-        type: "command", command: "/bin/sleep 2", timeout: 1,
-      };
-      writeFileSync(file, JSON.stringify(registration));
     }
     this.env = {};
     for (const key of ["HOME", "USER", "LOGNAME", "TMPDIR", "LANG"]) {

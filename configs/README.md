@@ -4,7 +4,7 @@ Personal agent preferences and OpenSpec config for concise communication, delibe
 
 | Template | Purpose | Where to adopt it |
 |---|---|---|
-| [AGENTS.md](codex/AGENTS.example.md) | Communication style, delegation, tool use and verification habits | Your agent's global or project instructions |
+| [AGENTS.md](agents/AGENTS.example.md) | Communication style, delegation, tool use and verification habits | Your agent's global or project instructions |
 | [OpenSpec config](openspec/config.example.yaml) | Rules for proposals, specs, designs and tasks, plus apply/archive guidance | The selected OpenSpec root's `openspec/config.yaml` |
 
 These are editable examples. Adding the marketplace or installing a plugin does not install them. Their `.example` filenames are not standard instruction/configuration discovery names. There is no installer or automatic update of adopted copies.
@@ -13,7 +13,7 @@ These are editable examples. Adding the marketplace or installing a plugin does 
 
 The preferences apply across agents; where to put them depends on your tool. Use `AGENTS.md` with agents that support it, or merge the preferences into your agent's equivalent instruction file.
 
-1. Read [AGENTS.example.md](codex/AGENTS.example.md), then choose which preferences to adopt.
+1. Read [AGENTS.example.md](agents/AGENTS.example.md), then choose which preferences to adopt.
 2. Choose the scope. For example, Codex uses `$CODEX_HOME/AGENTS.md` for personal defaults if that variable is set, otherwise `~/.codex/AGENTS.md`. Use the repository's `AGENTS.md` for project guidance.
 3. Back up any existing file and merge selected sections. Preserve your existing organization and project instructions.
 4. Check your agent's instruction precedence. In Codex, an `AGENTS.override.md` in the same scope takes precedence over `AGENTS.md`, and more specific project instructions can affect the result. Start a new session after editing.

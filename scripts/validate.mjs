@@ -83,9 +83,6 @@ for (const path of files) {
   if (!textExtensions.has(extname(path))) continue;
   const content = readFileSync(path, "utf8");
   if (/[\u2013\u2014]/u.test(content)) fail(`unsupported dash punctuation: ${display(path)}`);
-  if (extname(path) === ".md" && /build_board\.py\b/.test(content)) {
-    fail(`${display(path)}: board command must reference build_board.mjs`);
-  }
 }
 const board = join(root, "plugins/ui-ux-design-council/skills/ui-ux-design-council/scripts/build_board.mjs");
 if (!existsSync(board)) fail("compiled build_board.mjs is missing; run npm run build before distributing");

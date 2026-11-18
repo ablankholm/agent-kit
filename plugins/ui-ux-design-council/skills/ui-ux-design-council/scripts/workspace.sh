@@ -18,13 +18,14 @@
 #
 # Where artifacts land follows where the skill is installed:
 #   skill inside the repo   -> <repo>/.ui-ux-design-council/   (shared tooling, shared artifacts)
-#   skill installed globally -> $XDG_STATE_HOME/ui-ux-design-council/<repo>-<hash>/  (personal, repo untouched)
+#   skill installed globally -> $XDG_STATE_HOME/ui-ux-design-council/<repo>-<hash>/  (artifacts outside the repo)
 # Override per run with --local or --global, or permanently with UIUX_COUNCIL_WORKSPACE.
 # Variant source code always stays in the repo's source tree: it has to compile
 # against the app. `scratch` keeps it ignored and registered for teardown.
 #
 # clean prints a plan and deletes nothing without --yes.
-# Nothing is deleted if git tracks a file inside it, unless --force.
+# Tracked scratch directories are skipped unless --force; registered worktrees
+# are removed in full by approved clean, including their tracked files.
 # Set UIUX_COUNCIL_WORKSPACE to put the workspace outside the repo entirely.
 #
 # bash 3.2 compatible. Never edits the repo's own .gitignore.
@@ -147,7 +148,7 @@ write_self_ignore() {
 *
 IGNORE_EOF
 }
-POLICY_DEFAULT_EXPIRE=14   # days untouched before gc reclaims scratch, ledger excepted
+POLICY_DEFAULT_EXPIRE=14   # inactive days before eligibility for approved gc
 policy_get() { # key, default
   v=""
   [ -f "$BASE/.policy" ] && v="$(grep -m1 "^$1=" "$BASE/.policy" 2>/dev/null | cut -d= -f2-)"
@@ -206,7 +207,7 @@ init)
   if [ "$exp" = "never" ]; then
     echo "expiry     never; this workspace is kept until someone removes it"
   else
-    echo "expiry     untouched for ${exp}d means a later 'gc' reclaims the scratch and keeps log.json"
+    echo "expiry     inactive for ${exp}d makes artifacts eligible for cleanup; 'gc' previews, '--yes' deletes"
   fi
   ;;
 
@@ -302,14 +303,14 @@ policy)
     policy_set prune "$PRUNE_SET"
   fi
   echo "workspace    $BASE"
-  echo "expire_days  $(policy_get expire_days "$POLICY_DEFAULT_EXPIRE")   # gc reclaims scratch after this many untouched days; log.json survives"
+  echo "expire_days  $(policy_get expire_days "$POLICY_DEFAULT_EXPIRE")   # inactive days before cleanup eligibility; gc previews, --yes deletes"
   echo "prune        $(policy_get prune offer)   # 'off' means the council stops offering mid-session reclaims"
   exit 0
   ;;
 
 gc)
-  # Reclaims abandoned workspaces. Never touches the repo's source tree, and
-  # never touches a workspace whose policy says never.
+  # Previews abandoned workspace cleanup; --yes applies the plan.
+  # Leaves registered source-tree scratch alone. A never policy needs --force.
   case "${OLDER:-0}" in ""|*[!0-9]*) fail "--older-than takes a whole number of days" ;; esac
   now="$(date +%s)"
   mtime_of() { stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || echo 0; }

@@ -42,7 +42,7 @@ function settingsSummary({ env, cwd }) {
     { scope: "project", path: join(project, ".claude/settings.json") },
     { scope: "local", path: join(project, ".claude/settings.local.json") },
   ];
-  const errors = [], legacyScopes = [], registrationScopes = [];
+  const errors = [], registrationScopes = [];
   let disableAllHooks = false, pluginEnabled;
   for (const source of sources) {
     const settings = readSettings(source.path);
@@ -55,13 +55,12 @@ function settingsSummary({ env, cwd }) {
         if (!Array.isArray(entry?.hooks)) continue;
         for (const hook of entry.hooks) {
           if (typeof hook?.command !== "string") continue;
-          if (/kubectl-safety-hook\.sh/.test(hook.command)) legacyScopes.push(source.scope);
-          else if (/kubectl-guard(?:\.sh|\/scripts\/)/.test(hook.command)) registrationScopes.push(source.scope);
+          if (/kubectl-guard(?:\.sh|\/scripts\/)/.test(hook.command)) registrationScopes.push(source.scope);
         }
       }
     }
   }
-  return { project, errors, legacyScopes, registrationScopes, disableAllHooks, pluginEnabled };
+  return { project, errors, registrationScopes, disableAllHooks, pluginEnabled };
 }
 
 export function selfCheck() {
@@ -123,21 +122,10 @@ export function runDoctor({ env = process.env, cwd = process.cwd(), pluginRoot =
       : settings.disableAllHooks ? "Inspected settings set disableAllHooks. Check /status and enable hooks deliberately."
         : settings.pluginEnabled === false ? "Inspected settings disable this plugin. Enable it and restart Claude."
           : "Inspected user/project/local files contain no effective hook or plugin disable setting.");
-  const duplicateCount = settings.legacyScopes.length + settings.registrationScopes.length;
-  check("legacy registration", duplicateCount ? "fail" : "pass", duplicateCount
-    ? `${duplicateCount} direct guard registration(s) found in ${[...new Set([...settings.legacyScopes, ...settings.registrationScopes])].join(", ")} settings. Remove only the legacy/manual guard entries after backing up settings; keep the plugin.`
-    : "No legacy or duplicate direct guard registration found in inspected settings.");
-  if (configDir && existsSync(join(configDir, "kubectl-guard-local-contexts"))) {
-    try {
-      const path = join(configDir, "kubectl-guard-local-contexts");
-      const info = statSync(path);
-      if (!info.isFile() || info.size > 65536) throw new Error("Invalid legacy file");
-      const patterns = readFileSync(path, "utf8").split(/\r?\n/).filter((line) => line.split("#")[0].trim());
-      check("legacy patterns", patterns.length ? "warn" : "pass", patterns.length
-        ? `${patterns.length} legacy context pattern(s) are inert in v2. Configure exact context/server pairs only if you want exceptions.`
-        : "Legacy context file has no active patterns; v2 does not use it for trust.");
-    } catch { check("legacy patterns", "warn", "Legacy context file could not be inspected. It has no trust effect in v2."); }
-  }
+  const duplicateCount = settings.registrationScopes.length;
+  check("direct registration", duplicateCount ? "fail" : "pass", duplicateCount
+    ? `${duplicateCount} direct guard registration(s) found in ${[...new Set(settings.registrationScopes)].join(", ")} settings. Remove only the manual guard entries after backing up settings; keep the plugin.`
+    : "No duplicate direct guard registration found in inspected settings.");
 
   const installed = invoke("claude", ["plugin", "list", "--json"]);
   let installationDisabled = false;

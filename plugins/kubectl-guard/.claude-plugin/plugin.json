@@ -1,6 +1,6 @@
 {
   "name": "kubectl-guard",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Require explicit mutation targets, confirm risky kubectl commands, and diagnose guard installation and session observation.",
   "author": { "name": "Anders Blankholm", "url": "https://github.com/ablankholm" },
   "homepage": "https://github.com/ablankholm/agent-kit/tree/main/plugins/kubectl-guard",

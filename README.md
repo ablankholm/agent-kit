@@ -13,7 +13,7 @@ My collection of agent skills, hooks and config examples, shared in case you fin
 
 | Template | Purpose |
 |---|---|
-| [AGENTS.md](configs/codex/AGENTS.example.md) | Personal preferences for communication, delegation, tools and verification. |
+| [AGENTS.md](configs/agents/AGENTS.example.md) | Personal preferences for communication, delegation, tools and verification. |
 | [OpenSpec config](configs/openspec/config.example.yaml) | Planning rules and guidance for implementation and archiving. |
 
 Review and merge these examples into your own setup. Follow the [configuration guide](configs/README.md) for scope, compatibility and adoption. Installing a plugin does not install these templates.

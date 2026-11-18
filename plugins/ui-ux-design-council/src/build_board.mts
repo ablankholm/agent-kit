@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Generated runtime: edit src/build_board.mts and run npm run build.
+/** Generated runtime: edit plugins/ui-ux-design-council/src/build_board.mts and run npm run build.
  * Build the comparison board with Node.js builtins only.
  */
 import { lstatSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";

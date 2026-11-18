@@ -2,13 +2,14 @@
 // Compile into a temporary directory and compare every generated file to the release.
 import { mkdtempSync, readFileSync, readdirSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, relative } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
-const root = dirname(dirname(fileURLToPath(import.meta.url)));
+const plugin = dirname(dirname(fileURLToPath(import.meta.url)));
+const root = resolve(plugin, "../..");
 const compiler = join(root, "node_modules/typescript/bin/tsc");
-const output = join(root, "plugins/ui-ux-design-council/skills/ui-ux-design-council/scripts");
+const output = join(plugin, "skills/ui-ux-design-council/scripts");
 if (!existsSync(compiler)) {
   console.error("Run npm ci to install development dependencies before checking the build.");
   process.exit(1);
@@ -21,7 +22,7 @@ function files(directory) {
   });
 }
 try {
-  const compiled = spawnSync(process.execPath, [compiler, "--project", join(root, "tsconfig.json"), "--outDir", temporary], { cwd: root, stdio: "inherit" });
+  const compiled = spawnSync(process.execPath, [compiler, "--project", join(plugin, "tsconfig.json"), "--outDir", temporary], { cwd: root, stdio: "inherit" });
   if (compiled.error) throw compiled.error;
   if (compiled.status !== 0) throw new Error("TypeScript compilation failed.");
   const generated = files(temporary);

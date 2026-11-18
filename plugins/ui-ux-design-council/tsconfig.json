@@ -10,7 +10,7 @@
     "forceConsistentCasingInFileNames": true,
     "newLine": "lf",
     "rootDir": "src",
-    "outDir": "plugins/ui-ux-design-council/skills/ui-ux-design-council/scripts"
+    "outDir": "skills/ui-ux-design-council/scripts"
   },
   "include": ["src/**/*.mts"]
 }

@@ -1,6 +1,6 @@
 # agent-kit
 
-An independent collection of reusable skills, hooks and configuration templates. Add the GitHub marketplace once, then install the plugins you want. Each plugin documents its supported agents and requirements.
+My collection of agent skills, hooks and config examples, shared in case you find them useful. Add the GitHub marketplace once, then install the plugins you want. Each plugin documents its supported agents and requirements.
 
 ## Available plugins
 
@@ -9,14 +9,12 @@ An independent collection of reusable skills, hooks and configuration templates.
 | [UI/UX Design Council](plugins/ui-ux-design-council/README.md) | `ui-ux-design-council` | Codex, Claude Code | Compare competing interface designs, review usability, and implement the chosen direction. |
 | [Kubectl Guard](plugins/kubectl-guard/README.md) | `kubectl-guard` | Claude Code | Require explicit mutation targets, confirm risky kubectl commands, and check installation health. |
 
-Each plugin's README covers what it does, how to install it, what it requires, and what it reads and writes.
-
-## Configuration templates
+## Configs
 
 | Template | Purpose |
 |---|---|
-| [Codex AGENTS.md](configs/codex/AGENTS.example.md) | Personal preferences for communication, delegation, tools and verification. |
-| [OpenSpec configuration](configs/openspec/config.example.yaml) | Planning rules and guidance for implementation and archiving. |
+| [AGENTS.md](configs/codex/AGENTS.example.md) | Personal preferences for communication, delegation, tools and verification. |
+| [OpenSpec config](configs/openspec/config.example.yaml) | Planning rules and guidance for implementation and archiving. |
 
 Review and merge these examples into your own setup. Follow the [configuration guide](configs/README.md) for scope, compatibility and adoption. Installing a plugin does not install these templates.
 
@@ -43,21 +41,6 @@ Inside Claude Code, the equivalent command is:
 ```
 
 These commands were checked with Codex 0.166.0 and Claude Code 2.1.236. If your CLI has no `plugin` command, update it or consult the plugin's README for alternatives.
-
-## Development
-
-```sh
-git clone https://github.com/ablankholm/agent-kit.git
-cd agent-kit
-npm ci
-npm run validate
-```
-
-Validation checks that generated JavaScript matches its TypeScript source, then checks each host's catalog and package manifests, hook configuration, skill metadata and references, helper syntax, and regression tests. If Claude Code is installed, it also runs the host's strict validators on the Claude marketplace and its plugins. Development uses Node and Bash; Python is not required.
-
-The design council's board generator is authored in `src/build_board.mts`. After editing it, run `npm run build`, then `npm run validate`, and commit both the source and generated `plugins/ui-ux-design-council/skills/ui-ux-design-council/scripts/build_board.mjs`. TypeScript and Node type definitions are development-only dependencies. To run the package checks and tests without installing the compiler, use `node scripts/validate.mjs` (or `bash scripts/validate.sh`); this skips the source-to-output comparison.
-
-Plugins live under `plugins/<plugin-name>/`, with skills in `skills/<skill-name>/` and Claude hooks in `hooks/hooks.json`. Include a manifest and catalog entry for each supported agent, add a row to the index above, and document the plugin in its own README. Host-specific plugins need only their supported host's manifest and entry. Plugins shared by both agents must use the same source directory and version in both manifests. Validation rejects unregistered host manifests, so removing a catalog entry cannot silently drop an existing host's distribution.
 
 ## License
 

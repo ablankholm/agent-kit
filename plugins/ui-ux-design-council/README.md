@@ -12,13 +12,12 @@ A UI/UX design skill in the [agent-kit collection](../../README.md), available f
 
 ## What it does
 
-1. **Preflight (cached per repo):** detects which sub-skills, OpenSpec and Haft/Quint are present. It offers install commands, with a repo-vs-global recommendation, for anything missing.
-2. **Grounds in the repo:** inventories existing tokens, components and patterns.
-3. **Intake:** asks only what it can't infer, in one batch with recommended defaults.
-4. **Brief in your system of record:** an OpenSpec proposal, specs, design and tasks when the repo uses OpenSpec; Haft framing when present; otherwise a freeform brief.
-5. **Competing directions:** three by default. It uses fewer for constrained work, or a morphological matrix when there are several independent design axes.
-6. **Iteration loop:** builds variants as real code behind a dev-only switch, captures them under identical conditions, judges them (Nielsen, anti-slop, weighted rubric) and records lineage in `log.json`. It generates a comparison board with a score trend, regression flags, per-iteration grids, champion lineage and an A/B overlay.
-7. **Finalizes** the champion, recommends removing the losing variants, and reviews the result again.
+1. **Understands your product:** starts with your existing components, styles and constraints, and asks only what it can't infer.
+2. **Explores alternatives:** builds different working designs, usually three, so you can compare directions before choosing one.
+3. **Challenges the designs:** brings specialist perspectives to usability, accessibility and visual quality, and shows the alternatives side by side on a comparison board.
+4. **Improves your chosen direction:** uses your feedback to refine the design, checks the result, and offers to clean up the discarded alternatives.
+
+It uses your existing OpenSpec or Haft workflow when available and offers to install missing specialist skills with your approval.
 
 ## Install
 
@@ -59,20 +58,20 @@ Start a new session in your project after installing, then ask for the skill by 
 
 ## Requirements
 
-- Bash for the cached dependency detector and the workspace manager. On Windows, use a compatible environment such as WSL.
-- Node.js 18 or newer for the comparison board, the screenshot helper and the prune helper. These use only Node's built-in modules and ship as plain JavaScript, so there is no compiler, build step or `npm install` for skill users.
+- Bash. On Windows, use a compatible environment such as WSL.
+- Node.js 18 or newer. No build step or `npm install` is needed to use the skill.
 - Playwright in the target project for automated screenshots. The agent's own browser tools can capture them instead.
 - Optional specialist skills: Impeccable, Nielsen Heuristics Audit, UI/UX Pro Max, and an available frontend skill. The council detects them, offers installation when needed, and includes fallbacks for missing seats. They are separate third-party projects, not bundled here. See the [dependency registry](skills/ui-ux-design-council/references/skill-registry.md).
 - OpenSpec and Haft/Quint integration follows the project's existing setup. Neither is required.
 
 ## Artifacts and cleanup
 
-A design session produces throwaway material: competing variants as real code, parity screenshots at several breakpoints and states, and an HTML comparison board. The council manages that itself rather than leaving it in your working tree.
+Design sessions create working alternatives, screenshots and a comparison board. The council tells you where the artifacts are stored and offers cleanup when you finish.
 
-- **Where it goes.** Artifacts follow the skill's install scope. Installed globally, they live in `$XDG_STATE_HOME/ui-ux-design-council/<repo>-<hash>/` and your project is never written to. Installed inside a repo, they live in `<repo>/.ui-ux-design-council/` behind a self-ignoring `.gitignore`, so they stay out of `git status` without touching the repo's own ignore rules. Override with `--local`, `--global` or `UIUX_COUNCIL_WORKSPACE`.
-- **Variant code is the exception.** It has to compile against the real app with the real tokens, so it stays in the source tree. The council registers each throwaway directory on creation, keeps it ignored, and removes it at teardown. It also flags any tracked file still importing a variant, which would otherwise break the build for everyone else.
-- **You decide what gets deleted.** Mid-session reclaim offers are dry runs that delete nothing; the council acts only on an explicit yes, and a non-answer is a no. At the final decision it recommends teardown strongly, and still asks.
-- **Nothing accumulates silently.** Each workspace carries an expiry (14 untouched days by default). A session that is abandoned or forgotten has its screenshots reclaimed by a later sweep, while `log.json`, which holds the scores, feedback and lineage, is kept. `workspace.sh policy --expire never` makes a workspace permanent, and that answer outranks any later sweep.
+- **Storage:** a global install keeps artifacts in a project-specific directory under `$XDG_STATE_HOME/ui-ux-design-council/`, defaulting to `~/.local/state/ui-ux-design-council/`. A repo-local install uses `<repo>/.ui-ux-design-council/`, which is ignored by Git. Set `UIUX_COUNCIL_WORKSPACE` to choose another storage root.
+- **Project edits:** temporary design variants and the chosen implementation can change project files, regardless of where screenshots and boards are stored.
+- **Cleanup:** deletion requires your approval. Inactive workspaces become eligible for cleanup after 14 days; this is not a timer that deletes files automatically. Cleanup of expired artifacts preserves the scores, feedback and design log.
+- **Keeping your work:** ask to keep a session indefinitely to disable its expiry policy.
 
 Screenshots, logs, feedback and boards can contain private product information. Review them before sharing. An `--inline` board embeds every screenshot in the HTML, so it inherits their sensitivity.
 
@@ -84,16 +83,3 @@ This plugin contains instructions and local helpers. It has no hooks, MCP server
 - Design work can edit project files.
 - Screenshot capture visits the application URLs supplied in the iteration log. The board generator reads local screenshots and writes HTML; it does not upload anything.
 - Installing another skill is a separate action requiring consent. Review its source and permissions before installing it.
-
-## Files
-
-The paths below are relative to `skills/ui-ux-design-council/`.
-
-- `SKILL.md`: the orchestration workflow
-- `references/`: skill registry, intake, OpenSpec/Haft integration, arbitration rules, comparison method, fallbacks
-- `scripts/detect_deps.sh`: cached dependency detection
-- `scripts/workspace.sh`: workspace creation, scratch registration, status, prune, teardown, policy and cross-project sweeps
-- `scripts/prune.mjs`: lineage-aware mid-session reclaim, used by `workspace.sh prune`
-- `scripts/capture.mjs`: parity screenshots via Playwright
-- `scripts/build_board.mjs`: comparison board (compiled from the repository's `src/build_board.mts`)
-- `assets/log.example.json`: example iteration log

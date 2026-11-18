@@ -10,6 +10,7 @@
     "build": "tsc --project tsconfig.json",
     "build:check": "node scripts/check-build.mjs",
     "test": "node --test",
+    "test:claude": "KUBECTL_GUARD_RUN_CLAUDE_TESTS=1 node --test tests/claude-guard.integration.test.mjs",
     "validate": "npm run build:check && node scripts/validate.mjs"
   },
   "devDependencies": {

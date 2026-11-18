@@ -1,239 +1,187 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { configurationDirectory, loadPolicy, normalizedServer } from "./policy.mjs";
+import { mentionsKubectl, parsePipeline, safeFilter } from "./shell.mjs";
+import { writeObservation } from "./observations.mjs";
+export { configurationDirectory } from "./policy.mjs";
 
 const binaries = new Set(["kubectl", "kubecolor"]);
-const reads = new Set([
-  "get", "describe", "logs", "top", "explain", "api-resources", "api-versions", "version", "events",
-]);
-const localMutations = new Set([
-  "delete", "apply", "create", "replace", "patch", "scale", "drain", "cordon", "uncordon",
-  "taint", "rollout", "set", "autoscale", "annotate", "label", "run", "expose", "certificate",
-]);
-export const localDefaults = [
-  "docker-desktop", "minikube", "kind-*", "k3d-*", "colima*", "orbstack*",
-  "rancher-desktop", "k3s-default", "microk8s",
-];
-const valueFlags = new Set(["-n", "--namespace", "--context", "--request-timeout", "--cache-dir", "-v", "--v", "--vmodule"]);
-const boolFlags = new Set(["--match-server-version", "--warnings-as-errors"]);
+const reads = new Set(["get", "describe", "logs", "top", "explain", "api-resources", "api-versions", "version", "events"]);
+const mutations = new Set(["delete", "apply", "create", "replace", "patch", "edit", "scale", "drain", "cordon", "uncordon", "taint", "rollout", "set", "autoscale", "annotate", "label", "run", "expose", "certificate"]);
+const valueFlags = new Set(["-n", "--namespace", "--context", "--request-timeout", "--cache-dir", "-v", "--v", "--vmodule", "-s", "--server", "--kubeconfig", "--kuberc", "--cluster", "--user", "--as", "--as-group", "--as-uid", "--token", "--username", "--password", "--client-certificate", "--client-key", "--certificate-authority", "--tls-server-name"]);
+const boolFlags = new Set(["--match-server-version", "--warnings-as-errors", "--insecure-skip-tls-verify"]);
 const targetFlags = /^--(?:kubeconfig|kuberc|server|cluster|user|as|as-group|as-uid|token|username|password|client-certificate|client-key|certificate-authority|tls-server-name|insecure-skip-tls-verify|raw)(?:=|$)/;
+const createBuiltins = new Set(["clusterrole", "clusterrolebinding", "configmap", "cronjob", "deployment", "ingress", "job", "namespace", "poddisruptionbudget", "priorityclass", "quota", "role", "rolebinding", "serviceaccount", "token"]);
 const guarded = (word) => binaries.has(basename(word));
-const createBuiltins = new Set([
-  "clusterrole", "clusterrolebinding", "configmap", "cronjob", "deployment", "ingress", "job",
-  "namespace", "poddisruptionbudget", "priorityclass", "quota", "role", "rolebinding", "serviceaccount", "token",
-]);
+const literalName = (name) => typeof name === "string" && name.length > 0 && name.length <= 512 && !name.startsWith("-") && !/[\x00-\x1f\x7f]/.test(name);
+const safeName = (name) => literalName(name) ? JSON.stringify(name) : "unresolved";
 
 function normalizeFlag(arg) {
   if (!arg.startsWith("--")) return arg;
   const equals = arg.indexOf("=");
   const end = equals < 0 ? arg.length : equals;
-  // kubectl's pflag normalizer accepts underscores in flag names, not their values.
   return arg.slice(0, end).replaceAll("_", "-") + arg.slice(end);
 }
 
-// A narrow literal shell grammar, not a shell interpreter. Unsupported syntax
-// cannot qualify for the no-extra-prompt path. Quotes are removed without eval.
-function literalWords(command) {
-  if (/[\r\n\x00]/.test(command)) return null;
-  const words = [];
-  let word = "", quote = "", started = false;
-  for (let i = 0; i < command.length; i++) {
-    const ch = command[i];
-    if (quote === "'") {
-      if (ch === "'") quote = "";
-      else word += ch;
-    } else if (ch === "\\") {
-      const next = command[++i];
-      if (next === undefined) return null;
-      if (quote === '"' && !['$', '`', '"', '\\'].includes(next)) word += "\\";
-      word += next;
-      started = true;
-    } else if (ch === quote && quote) {
-      quote = "";
-    } else if (ch === "$" || ch === "`") {
-      return null;
-    } else if (quote) {
-      word += ch;
-    } else if (ch === "'" || ch === '"') {
-      quote = ch;
-      started = true;
-    } else if ("|&;<>()[{}]*?!~".includes(ch) || (ch === "#" && !started)) {
-      return null;
-    } else if (ch === " " || ch === "\t") {
-      if (started) words.push(word);
-      word = "";
-      started = false;
-    } else {
-      word += ch;
-      started = true;
-    }
-  }
-  if (quote) return null;
-  if (started) words.push(word);
-  return words;
-}
-
-// This fallback intentionally errs toward a prompt, including text inside wrappers.
-// It is not an attempt to discover aliases, encoded programs, or dynamic binaries.
-function mentionsKubectl(command) {
-  return /kubectl|kubecolor/.test(command.replace(/[\\'"\r\n]/g, ""));
-}
-
-export function parseLocalPatterns(content) {
-  if (content.includes("\0")) throw new Error("Local-context configuration contains a NUL byte.");
-  return content.split(/\r?\n/).map((line) => line.split("#")[0].trim()).filter(Boolean);
-}
-
-function matches(context, pattern) {
-  // Bounded wildcard matching without regex backtracking. The caller also limits
-  // pattern count/length and context length so the host hook timeout stays distant.
-  const text = [...context], glob = [...pattern];
-  let i = 0, j = 0, star = -1, retry = 0;
-  while (i < text.length) {
-    if (glob[j] === "?" || glob[j] === text[i]) { i++; j++; }
-    else if (glob[j] === "*") { star = j++; retry = i; }
-    else if (star >= 0) { j = star + 1; i = ++retry; }
-    else return false;
-  }
-  while (glob[j] === "*") j++;
-  return j === glob.length;
-}
-
-// Return a reason to ask, or null to leave the host's existing permissions alone.
-// The guard never grants permission to the Bash call, including harmless calls.
-export function assess(command, { getCurrentContext = () => "", getLocalPatterns = () => [] } = {}) {
-  const words = literalWords(command);
-  if (!words || !words.length || !guarded(words[0])) {
-    return mentionsKubectl(command) ? "Complex or indirect kubectl command. Confirm its full shell behavior and target." : null;
-  }
-  const args = words.slice(1).map(normalizeFlag);
-  let context, contextCount = 0;
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (arg === "--") return "Arguments after -- are outside the guard's literal command checks. Confirm this kubectl command.";
-    if (/^--profile(?:-output)?(?:=|$)/.test(arg)) {
-      return "kubectl profiling can create or overwrite local files. Confirm before running.";
-    }
-    if (/^--edit(?:=|$)/.test(arg) || /^-e/.test(arg)) {
-      return "kubectl may launch an external editor. Confirm its local effects as well as the cluster target.";
-    }
-    if (targetFlags.test(arg) || /^-s/.test(arg)) {
-      return "kubectl uses a connection, authentication, configuration, or raw-endpoint override. Confirm the effective target.";
-    }
-    // A boolean shorthand can be bundled with -s (for example -wsSERVER).
-    // Only familiar value-taking shorthands can safely consume an attached value.
-    if (/^-[^-].+/.test(arg) && !/^-[nofklvc]/.test(arg)) {
-      return "kubectl uses bundled or unfamiliar shorthand flags. Confirm its effective target.";
-    }
-    if (arg === "--context" || arg.startsWith("--context=")) {
-      // pflag accepts flag-looking values. In `apply -f --context=kind-demo`,
-      // the second token is a filename, not a selector. Ambiguity must not create trust.
-      if (i > 0 && args[i - 1].startsWith("-") && !args[i - 1].includes("=")) {
-        return "A context-looking token may be the previous flag's value. Confirm the effective target.";
-      }
-      contextCount++;
-      context = arg === "--context" ? args[++i] : arg.slice("--context=".length);
-      if (!context || context.startsWith("-") || /[\x00-\x1f\x7f]/.test(context)) return "kubectl context is missing or ambiguous. Confirm the target.";
-    }
-  }
-  if (contextCount > 1) return "kubectl repeats its context selector. Confirm which target is intended.";
-
-  let index = 0;
-  while (args[index]?.startsWith("-")) {
-    const flag = args[index];
-    const key = flag.split("=")[0];
+function verbIndex(args) {
+  let i = 0;
+  while (args[i]?.startsWith("-")) {
+    const flag = args[i], key = flag.split("=")[0];
     if (valueFlags.has(key)) {
       if (!flag.includes("=")) {
-        if (!args[index + 1] || args[index + 1].startsWith("-")) return "kubectl has a missing flag value. Confirm this command.";
-        index++;
-      } else if (!flag.slice(flag.indexOf("=") + 1)) return "kubectl has an empty flag value. Confirm this command.";
-    } else if (!boolFlags.has(key) && !/^-n[^-].*/.test(flag)) {
-      return "kubectl has an unrecognized leading flag. Confirm its operation.";
-    }
-    index++;
+        if (!args[i + 1] || args[i + 1].startsWith("-")) return -1;
+        i++;
+      } else if (!flag.slice(flag.indexOf("=") + 1)) return -1;
+    } else if (!boolFlags.has(key) && !/^-n[^-].*/.test(flag)) return -1;
+    i++;
   }
-  const verb = args[index];
-  if (reads.has(verb)) return null;
-  // cluster-info dump can write files; only its argument-free form is a simple read.
-  if (verb === "cluster-info" && index === args.length - 1) return null;
-  if (!localMutations.has(verb)) return "kubectl operation is outside the recognized read and local-mutation lists. Confirm before running.";
-  if (verb === "apply" && args.includes("edit-last-applied")) return "kubectl may launch an external editor. Confirm before running.";
+  return i;
+}
+
+function analyze(argv) {
+  const args = argv.slice(1).map(normalizeFlag), index = verbIndex(args), verb = args[index];
+  const kind = reads.has(verb) || (verb === "cluster-info" && index === args.length - 1) ? "read" : mutations.has(verb) ? "mutation" : "other";
+  const result = { kind, operation: reads.has(verb) || mutations.has(verb) || ["exec", "attach", "cp", "proxy", "port-forward", "debug", "diff", "config", "cluster-info"].includes(verb) ? verb : "unrecognized operation", context: undefined, namespace: undefined, allNamespaces: false, issue: null, targetIssue: false, exemptible: kind === "mutation" && verb !== "edit" };
+  const issue = (message, target = false) => {
+    if (!result.issue || target) result.issue = message;
+    result.targetIssue ||= target;
+  };
+  let contexts = 0, namespaces = 0;
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (/^(?:--filename|--kustomize)(?:=|$)/.test(arg) || /^-[fk]/.test(arg)) result.manifestNamespace = true;
+    if (arg === "--") { issue("Arguments after -- require manual inspection.", true); break; }
+    if (targetFlags.test(arg) || /^-s/.test(arg)) issue("Connection/authentication/configuration overrides make the target unresolved.", true);
+    if (/^--profile(?:-output)?(?:=|$)/.test(arg)) issue("Profiling can overwrite local files.");
+    if (/^--edit(?:=|$)/.test(arg) || /^-e/.test(arg)) issue("An external editor can execute local code.");
+    if (/^-[^-].+/.test(arg) && !/^-[nofklvc]/.test(arg)) issue("Bundled or unfamiliar shorthand flags make the target ambiguous.", true);
+    const contextFlag = arg === "--context" || arg.startsWith("--context=");
+    const namespaceFlag = arg === "-n" || arg === "--namespace" || arg.startsWith("--namespace=") || /^-n.+/.test(arg);
+    if (contextFlag || namespaceFlag) {
+      if (i > 0 && args[i - 1].startsWith("-") && !args[i - 1].includes("=")) issue("A target-looking token may be the previous flag's value.", true);
+      let value;
+      if (arg.includes("=")) value = arg.slice(arg.indexOf("=") + 1);
+      else if (arg.startsWith("-n") && arg.length > 2) value = arg.slice(2);
+      else value = args[++i];
+      if (!literalName(value)) issue("A context or namespace value is missing or invalid.", true);
+      if (contextFlag) { result.context = value; contexts++; }
+      else { result.namespace = value; namespaces++; }
+    }
+    if (arg === "-A" || arg === "--all-namespaces" || arg === "--all-namespaces=true") result.allNamespaces = true;
+    else if (arg.startsWith("--all-namespaces=") && arg !== "--all-namespaces=false") issue("An all-namespaces flag has an unrecognized value.", true);
+  }
+  if (contexts > 1 || namespaces > 1 || (result.allNamespaces && namespaces)) issue("Repeated or conflicting context/namespace selectors are ambiguous.", true);
+  if (verb === "apply" && args.includes("edit-last-applied")) issue("An external editor can execute local code.");
   if (verb === "create") {
     const subcommand = args[index + 1], child = args[index + 2];
-    const builtin = createBuiltins.has(subcommand)
-      || (subcommand === "secret" && ["generic", "tls", "docker-registry"].includes(child))
-      || (["service", "svc"].includes(subcommand) && ["clusterip", "externalname", "loadbalancer", "nodeport"].includes(child));
-    if (!builtin) return "kubectl create may dispatch an external plugin or has an unrecognized form. Confirm before running.";
+    const builtin = createBuiltins.has(subcommand) || (subcommand === "secret" && ["generic", "tls", "docker-registry"].includes(child)) || (["service", "svc"].includes(subcommand) && ["clusterip", "externalname", "loadbalancer", "nodeport"].includes(child));
+    if (!builtin) issue("This create form may dispatch an external plugin or is unrecognized.");
   }
-
-  const patterns = getLocalPatterns();
-  if (patterns.length > 128 || patterns.some((pattern) => pattern.length > 256)) {
-    return "Local-context patterns exceed the guard's bounded matching limits. Simplify them or confirm this command.";
-  }
-  if (patterns.some((pattern) => /[\[\]\\]/.test(pattern))) {
-    return "Local-context patterns support only * and ? wildcards. Update unsupported patterns or confirm this command.";
-  }
-  const effectiveContext = context ?? getCurrentContext();
-  if (typeof effectiveContext !== "string" || !effectiveContext || effectiveContext.length > 512 || /[\x00-\x1f\x7f]/.test(effectiveContext)) {
-    return "Could not resolve a single kubectl context. Confirm the target before mutating it.";
-  }
-  if ([...localDefaults, ...patterns].some((pattern) => matches(effectiveContext, pattern))) return null;
-  return "kubectl may change a cluster that is not designated local. Confirm the target and operation.";
+  if (result.issue) result.exemptible = false;
+  return result;
 }
 
-export function configurationDirectory(env) {
-  const directory = env.KUBECTL_GUARD_CONFIG_DIR || env.CLAUDE_CONFIG_DIR || (env.HOME && join(env.HOME, ".claude"));
-  if (!directory) throw new Error("Cannot locate user configuration.");
-  return directory;
+function targetSummary(info, target) {
+  const context = info.targetIssue ? undefined : info.context ?? target?.context;
+  let namespace = "unresolved";
+  if (!info.targetIssue) {
+    if (info.allNamespaces) namespace = "all namespaces (explicit)";
+    else if (info.namespace) namespace = `${safeName(info.namespace)} (explicit)`;
+    else if (info.manifestNamespace) namespace = "unresolved (manifest may select multiple namespaces or cluster-scoped resources)";
+    else if (target?.namespace) namespace = `${safeName(target.namespace)} (kubeconfig default; does not constrain cluster-scoped resources)`;
+    else if (target) namespace = '"default" (Kubernetes default)';
+  }
+  const server = !info.targetIssue && normalizedServer(target?.server);
+  // Only origin is displayed: a proxy server URL path can itself contain credentials.
+  return `Operation: ${info.operation}. Context: ${safeName(context)} (${info.targetIssue ? "overridden or ambiguous" : info.context ? "explicit" : "current; not pinned"}). Namespace: ${namespace}. Server: ${server ? new URL(server).origin : "unresolved"}.`;
 }
 
-function customPatterns(directory) {
-  let bytes;
+export function assess(command, { resolveTarget = () => null, getPolicy = () => ({ schemaVersion: 1, trustedTargets: [] }) } = {}) {
+  const ast = parsePipeline(command);
+  if (ast?.commands.length > 1) {
+    for (const node of ast.commands) {
+      if (!guarded(node.argv[0])) continue;
+      const stage = analyze(node.argv);
+      if (stage.kind === "mutation" && (!literalName(stage.context) || stage.targetIssue)) {
+        return { decision: "deny", reason: `${targetSummary(stage, null)} ${stage.issue ?? "A cluster mutation requires an explicit --context."} Run this mutation separately with one unambiguous context.` };
+      }
+    }
+  }
+  if (!ast || !guarded(ast.commands[0].argv[0])) {
+    return mentionsKubectl(command) ? { decision: "ask", reason: "Complex or indirect kubectl command. Target unresolved; inspect the whole shell command before approving." } : null;
+  }
+  const info = analyze(ast.commands[0].argv);
+  if (ast.commands.length > 1) {
+    if (info.kind === "read" && !info.issue && ast.commands.slice(1).every((node) => safeFilter(node.argv))) return null;
+    return { decision: "ask", reason: "This pipeline is outside the reviewed read-only forms. Run mutations separately with an explicit --context. Target unresolved." };
+  }
+  if (info.kind === "read" && !info.issue) return null;
+  const target = info.targetIssue ? null : resolveTarget(info.context);
+  // A resolver returning a different context must not lend its server to an exemption.
+  const resolved = target && literalName(target.context) && (!info.context || target.context === info.context) ? target : null;
+  const summary = targetSummary(info, resolved);
+  if (info.kind === "mutation" && (!literalName(info.context) || info.targetIssue)) {
+    return { decision: "deny", reason: `${summary} ${info.issue ?? "A cluster mutation requires an explicit --context."} Select one unambiguous context and retry.` };
+  }
+  if (info.kind === "mutation") {
+    const policy = getPolicy();
+    const server = normalizedServer(resolved?.server);
+    if (info.exemptible && server && policy.trustedTargets.some((entry) => entry.context === info.context && normalizedServer(entry.server) === server)) return null;
+  }
+  return { decision: "ask", reason: `${summary} ${info.issue ?? (info.kind === "mutation" ? "Confirm this cluster mutation; no exact trusted-target exception applies." : "This operation has unknown or external effects and requires confirmation.")}` };
+}
+
+export function decisionForMode(result, mode) {
+  if (result?.decision === "ask" && !["default", "acceptEdits", "plan", "bypassPermissions", "dontAsk"].includes(mode)) {
+    return { decision: "deny", reason: `${result.reason} Confirmation handling is unverified for this effective permission mode. Switch to default/manual mode and retry.` };
+  }
+  return result;
+}
+
+export function inspectTarget(context, cwd) {
+  if (context !== undefined && !literalName(context)) return null;
+  const args = ["config", "view", "--minify", "--output=json"];
+  if (context) args.push(`--context=${context}`);
+  const result = spawnSync("kubectl", args, { cwd, encoding: "utf8", timeout: 1500, killSignal: "SIGKILL", maxBuffer: 131072, stdio: ["ignore", "pipe", "pipe"], shell: false });
+  if (result.error || result.status !== 0) return null;
   try {
-    bytes = readFileSync(join(directory, "kubectl-guard-local-contexts"));
-  } catch (error) {
-    if (error.code === "ENOENT") return [];
-    throw new Error("Cannot read local-context configuration.");
-  }
-  if (bytes.length > 65536) throw new Error("Local-context configuration exceeds 64 KiB.");
-  return parseLocalPatterns(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-}
-
-function currentContext(cwd) {
-  // config current-context reads kubeconfig only; no API or credential execution.
-  const result = spawnSync("kubectl", ["config", "current-context"], {
-    cwd, encoding: "utf8", timeout: 1500, killSignal: "SIGKILL", maxBuffer: 65536,
-    stdio: ["ignore", "pipe", "pipe"], shell: false,
-  });
-  return result.error || result.status !== 0 ? "" : result.stdout.trim();
+    const data = JSON.parse(result.stdout), name = context ?? data["current-context"];
+    if (!literalName(name) || !Array.isArray(data.contexts) || !Array.isArray(data.clusters)) return null;
+    const selected = data.contexts.filter((entry) => entry.name === name);
+    if (selected.length !== 1 || typeof selected[0].context?.cluster !== "string") return null;
+    const clusters = data.clusters.filter((entry) => entry.name === selected[0].context.cluster);
+    if (clusters.length !== 1) return null;
+    const namespace = selected[0].context.namespace;
+    if (namespace !== undefined && !literalName(namespace)) return null;
+    return { context: name, server: normalizedServer(clusters[0].cluster?.server), namespace };
+  } catch { return null; }
 }
 
 function main() {
   if (Number(process.versions.node.split(".")[0]) < 18) throw new Error("Node.js 18+ is required.");
   const raw = readFileSync(0, "utf8");
   if (raw.length > 1048576) throw new Error("Hook input exceeds 1 MiB.");
-  const input = JSON.parse(raw);
+  let input;
+  try { input = JSON.parse(raw); } catch { throw new Error("Hook input must be valid JSON."); }
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Invalid hook payload.");
   if (input.tool_name && input.tool_name !== "Bash") return;
   if (input.hook_event_name && input.hook_event_name !== "PreToolUse") return;
   if (input.tool_name !== "Bash" || typeof input.tool_input?.command !== "string") throw new Error("Expected a Bash command payload.");
-  const reason = assess(input.tool_input.command, {
-    getCurrentContext: () => currentContext(typeof input.cwd === "string" ? input.cwd : process.cwd()),
-    getLocalPatterns: () => customPatterns(configurationDirectory(process.env)),
-  });
-  if (reason) {
-    process.stdout.write(`${JSON.stringify({ hookSpecificOutput: {
-      hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: reason,
-    } })}\n`);
-  }
+  const configDir = configurationDirectory(), cwd = typeof input.cwd === "string" ? input.cwd : process.cwd();
+  const result = decisionForMode(assess(input.tool_input.command, { resolveTarget: (context) => inspectTarget(context, cwd), getPolicy: () => loadPolicy(configDir) }), input.permission_mode);
+  // Observation is best-effort diagnostics and can never soften a decision.
+  try { writeObservation({ sessionId: input.session_id, cwd, permissionMode: input.permission_mode, outcome: result?.decision ?? "pass", configDir }); } catch { /* Doctor will report absent evidence. */ }
+  if (result) process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: result.decision, permissionDecisionReason: result.reason } })}\n`);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try { main(); }
-  catch {
-    // Do not echo command text, arguments, credentials, or malformed JSON to logs.
-    console.error("kubectl-guard: invalid input, unreadable configuration, or runtime failure. Check the plugin README. Command blocked.");
+  catch (error) {
+    // All expected error messages are fixed text. Never echo JSON or command args.
+    const diagnostic = /^(?:kubectl-guard\.json|Cannot (?:locate|read)|Each trusted target|Trusted servers|Duplicate trusted target|Node\.js|Hook input|Invalid hook payload|Expected a Bash)/.test(error.message) ? error.message : "Input, policy, or runtime failure. Run kubectl-guard doctor.";
+    console.error(`kubectl-guard: ${diagnostic} Command blocked.`);
     process.exitCode = 2;
   }
 }

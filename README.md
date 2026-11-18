@@ -7,7 +7,7 @@ An independent collection and GitHub marketplace of reusable skills and hooks. A
 | Name | Plugin | Hosts | Purpose |
 |---|---|---|---|
 | [UI/UX Design Council](plugins/ui-ux-design-council/README.md) | `ui-ux-design-council` | Codex, Claude Code | Compare competing interface designs, review usability, and implement the chosen direction. |
-| [Kubectl Guard](plugins/kubectl-guard/README.md) | `kubectl-guard` | Claude Code | Request confirmation for risky or ambiguous kubectl commands while preserving native permissions. |
+| [Kubectl Guard](plugins/kubectl-guard/README.md) | `kubectl-guard` | Claude Code | Require explicit mutation targets, confirm risky kubectl commands, and check installation health. |
 
 Each plugin's README covers what it does, how to install it, what it requires, and what it reads and writes.
 

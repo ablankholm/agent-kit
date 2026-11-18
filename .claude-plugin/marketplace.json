@@ -25,7 +25,7 @@
     {
       "name": "kubectl-guard",
       "source": "./plugins/kubectl-guard",
-      "description": "Claude Code approval guard for mutating or ambiguous kubectl commands, with trusted local-context handling and native permissions preserved.",
+      "description": "Claude Code kubectl guard with explicit mutation targets, exact context/server trust exceptions, safe read pipelines and installation diagnostics. Native permissions remain in force.",
       "category": "development",
       "tags": ["kubernetes", "kubectl", "hooks", "permissions"]
     }
